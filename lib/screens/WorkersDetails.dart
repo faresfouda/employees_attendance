@@ -1,9 +1,11 @@
 import 'package:flutter/cupertino.dart';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 
 import '../components/LiveClock.dart';
 import '../models/worker_model.dart';
+import '../provider/WorkerProvider.dart';
 
 class WorkerScreen extends StatefulWidget {
   final Worker worker;
@@ -29,44 +31,77 @@ class _WorkerScreenState extends State<WorkerScreen> {
 
   Future<void> _selectTime(BuildContext context, bool isCheckIn) async {
     TimeOfDay initialTime = TimeOfDay.now();
-
-    TimeOfDay? pickedTime = await showTimePicker(
-      context: context,
-      initialTime: initialTime,
-    );
+    TimeOfDay? pickedTime = await showTimePicker(context: context, initialTime: initialTime);
 
     if (pickedTime != null) {
       setState(() {
+        final workerProvider = context.read<WorkerProvider>();
         DateTime today = DateTime.now();
 
-        // البحث عن آخر سجل بدون تسجيل خروج حتى لو كان في يوم سابق
-        AttendanceRecord? lastRecord = widget.worker.attendanceRecords.lastWhere(
-              (record) => record.checkOutTime == null,
-          orElse: () => AttendanceRecord(date: today, checkInTime: pickedTime),
-        );
-
         if (isCheckIn) {
-          // إذا لم يكن هناك سجل غير مكتمل، يتم إنشاء سجل جديد
-          if (lastRecord.checkOutTime != null) {
-            lastRecord = AttendanceRecord(date: today, checkInTime: pickedTime);
-            widget.worker.attendanceRecords.add(lastRecord);
-          } else {
-            lastRecord.checkInTime = pickedTime; // تحديث وقت الدخول
-          }
+          AttendanceRecord newRecord = AttendanceRecord(
+            date: today,
+            checkInTime: pickedTime,
+          );
+          widget.worker.isRegistered = true;
+          widget.worker.attendanceRecords.add(newRecord);
+          checkInTime = pickedTime;
         } else {
-          lastRecord.checkOutTime = pickedTime; // تحديث وقت الخروج
+          AttendanceRecord? lastCheckInRecord = widget.worker.attendanceRecords.lastWhere(
+                (record) => record.checkOutTime == null,
+            orElse: () => AttendanceRecord(date: today, checkInTime: pickedTime),
+          );
+
+          if (lastCheckInRecord.date.isBefore(today) || lastCheckInRecord.date.isAtSameMomentAs(today)) {
+            lastCheckInRecord.checkOutTime = pickedTime;
+            widget.worker.isRegistered = false;
+            checkOutTime = pickedTime;
+          } else {
+            AttendanceRecord newCheckoutRecord = AttendanceRecord(
+              date: today,
+              checkOutTime: pickedTime,
+            );
+            widget.worker.isRegistered = false;
+            widget.worker.attendanceRecords.add(newCheckoutRecord);
+            checkOutTime = pickedTime;
+          }
         }
 
-        widget.worker.updateTotalHours(); // ✅ تحديث إجمالي الساعات
-        widget.worker.save(); // ✅ حفظ البيانات في Hive
+        widget.worker.updateTotalHours();
+        workerProvider.updateWorker(workerProvider.workers.indexOf(widget.worker), widget.worker);
       });
     }
   }
 
 
-  bool isSameDay(DateTime date1, DateTime date2) {
-    return date1.year == date2.year && date1.month == date2.month && date1.day == date2.day;
+  Future<bool> _showDeleteConfirmationDialog(BuildContext context) async {
+    return await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text("تأكيد الحذف"),
+          content: Text("هل أنت متأكد أنك تريد حذف هذا السجل؟ لا يمكن التراجع عن هذا الإجراء."),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(false); // إرجاع false عند الإلغاء
+              },
+              child: Text("إلغاء"),
+            ),
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop(true); // إرجاع true عند التأكيد
+
+              },
+              child: Text("حذف", style: TextStyle(color: Colors.red)),
+            ),
+          ],
+        );
+      },
+    ) ?? false; // في حالة إغلاق النافذة بدون اختيار
   }
+
+
 
 
   @override
@@ -144,11 +179,7 @@ class _WorkerScreenState extends State<WorkerScreen> {
                       children: [
                         Expanded(
                           child: ElevatedButton(
-                            onPressed: widget.worker.attendanceRecords.any((record) =>
-                            isSameDay(record.date, DateTime.now()) &&
-                                record.checkOutTime == null)
-                                ? null // تعطيل الزر في حالة عدم تسجيل انصراف
-                                : () => _selectTime(context, true), // تسجيل الحضور
+                            onPressed: () => _selectTime(context, true), // تسجيل الدخول
                             style: ElevatedButton.styleFrom(
                               backgroundColor: Colors.green,
                               padding: EdgeInsets.symmetric(vertical: 12),
@@ -159,7 +190,6 @@ class _WorkerScreenState extends State<WorkerScreen> {
                             ),
                           ),
                         ),
-
                         SizedBox(width: 8),
                         Expanded(
                           child: ElevatedButton(
@@ -195,34 +225,39 @@ class _WorkerScreenState extends State<WorkerScreen> {
                 itemCount: widget.worker.attendanceRecords.length,
                 itemBuilder: (context, index) {
                   final record = widget.worker.attendanceRecords[index];
-
                   return Dismissible(
                     key: Key(record.date.toString()),
-                    direction: DismissDirection.endToStart,
+                    direction: DismissDirection.startToEnd,
                     background: Container(
-                      alignment: Alignment.centerRight,
+                      alignment: Alignment.centerLeft,
                       padding: EdgeInsets.symmetric(horizontal: 20),
                       color: Colors.red,
                       child: Icon(Icons.delete, color: Colors.white),
                     ),
-                    onDismissed: (direction) {
-                      setState(() {
-                        widget.worker.attendanceRecords.removeAt(index);
-                        widget.worker.updateTotalHours();
+                    confirmDismiss: (direction) async {
+                      bool confirm = await _showDeleteConfirmationDialog(context);
+                      if (confirm) {
+                        setState(() {
+                          widget.worker.attendanceRecords.removeAt(index);
+                        });
                         widget.worker.save();
-                      });
+                      }
+                      return confirm;
                     },
+
+
+
                     child: _buildAttendanceRecord(
-                      record.checkInTime.format(context),
+                      record.checkInTime?.format(context) ?? '--:--',
                       record.checkOutTime?.format(context) ?? '--:--',
-                      record.workDuration.inHours,
+                      record.workDuration.inMinutes,
                       DateFormat('d MMMM yyyy', 'ar').format(record.date),
                     ),
                   );
+
                 },
               ),
             ),
-
 
           ],
         ),
@@ -230,15 +265,22 @@ class _WorkerScreenState extends State<WorkerScreen> {
     );
   }
 
-  Widget _buildAttendanceRecord(String checkIn, String checkOut, int hours, String date) {
+  Widget _buildAttendanceRecord(String checkIn, String checkOut,int minuts, String date) {
+    int hours = minuts ~/ 60; // عدد الساعات
+    int minutes_res = minuts % 60; // الدقائق المتبقية
+
     return Card(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: ListTile(
         leading: Icon(Icons.access_time, color: Colors.blue),
         title: Text('يوم $date', style: TextStyle(fontWeight: FontWeight.bold)),
         subtitle: Text('دخول: $checkIn - خروج: $checkOut'),
-        trailing: Text('$hours ساعات', style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green)),
+        trailing:Text(
+        '${hours} ساعات\n${minutes_res} دقيقة',
+        style: TextStyle(fontWeight: FontWeight.bold, color: Colors.green),
+        textAlign: TextAlign.right,
       ),
+    ),
     );
   }
 

@@ -1,8 +1,11 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:provider/provider.dart';
 import 'package:excel/excel.dart';
 import 'package:path_provider/path_provider.dart';
+import '../provider/WorkerProvider.dart';
+import '../models/worker_model.dart';
 
 class ReportsScreen extends StatefulWidget {
   @override
@@ -13,44 +16,34 @@ class _ReportsScreenState extends State<ReportsScreen> {
   DateTime startDate = DateTime.now().subtract(Duration(days: 7));
   DateTime endDate = DateTime.now();
 
-  // بيانات الحضور (محاكاة)
-  Map<String, List<String>> attendanceData = {
-    '2025-02-14': ['أحمد علي', 'محمد حسن', 'سعيد محمود'],
-    '2025-02-13': ['كريم ياسر', 'مصطفى فهمي'],
-    '2025-02-12': ['أحمد علي', 'يوسف سامي', 'خالد عماد'],
-    '2025-02-11': ['سعيد محمود', 'محمد حسن'],
-    '2025-02-10': ['أحمد علي', 'كريم ياسر'],
-  };
-
-  // تصفية بيانات الحضور بناءً على النطاق الزمني المحدد
-  Map<String, int> _calculateAttendance() {
+  // دالة لحساب أيام الحضور لكل عامل بناءً على الفترة المحددة
+  Map<String, int> _calculateAttendance(List<Worker> workers) {
     Map<String, int> attendanceCount = {};
 
-    attendanceData.forEach((date, workers) {
-      DateTime currentDate = DateTime.parse(date);
-      if (currentDate.isAfter(startDate.subtract(Duration(days: 1))) &&
-          currentDate.isBefore(endDate.add(Duration(days: 1)))) {
-        for (String worker in workers) {
-          attendanceCount[worker] = (attendanceCount[worker] ?? 0) + 1;
+    for (var worker in workers) {
+      for (var record in worker.attendanceRecords) {
+        if (record.date.isAfter(startDate.subtract(Duration(days: 1))) &&
+            record.date.isBefore(endDate.add(Duration(days: 1)))) {
+          attendanceCount[worker.name] = (attendanceCount[worker.name] ?? 0) + 1;
         }
       }
-    });
+    }
 
     return attendanceCount;
   }
 
   // دالة تصدير البيانات إلى Excel
-  Future<void> _exportToExcel() async {
+  Future<void> _exportToExcel(List<Worker> workers) async {
     var excel = Excel.createExcel();
     Sheet sheet = excel['التقرير'];
 
     // إضافة عنوان الجدول
-    // sheet.appendRow(['اسم العامل', 'عدد أيام الحضور']);
+    sheet.appendRow([TextCellValue('اسم العامل'), TextCellValue('عدد أيام الحضور')]);
 
     // إضافة بيانات التقرير
-    // _calculateAttendance().forEach((worker, daysPresent) {
-    //   sheet.appendRow([worker, daysPresent.toString()]);
-    // });
+    _calculateAttendance(workers).forEach((worker, daysPresent) {
+      sheet.appendRow([TextCellValue(worker), TextCellValue(daysPresent.toString())]);
+    });
 
     // حفظ الملف في التخزين
     Directory? directory = await getExternalStorageDirectory();
@@ -61,30 +54,17 @@ class _ReportsScreenState extends State<ReportsScreen> {
       ..writeAsBytesSync(excel.encode()!);
 
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم حفظ التقرير في: $filePath')),
-    );
-  }
-
-  // دالة لحذف بيانات الحضور للفترة المحددة
-  void _clearAttendance() {
-    attendanceData.removeWhere((date, _) {
-      DateTime currentDate = DateTime.parse(date);
-      return currentDate.isAfter(startDate.subtract(Duration(days: 1))) &&
-          currentDate.isBefore(endDate.add(Duration(days: 1)));
-    });
-
-    setState(() {});
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم مسح بيانات الحضور للفترة المحددة')),
+      SnackBar(content: Text('📁 تم حفظ التقرير في: $filePath')),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    Map<String, int> attendanceCount = _calculateAttendance();
+    final workerProvider = context.watch<WorkerProvider>();
+    Map<String, int> attendanceCount = _calculateAttendance(workerProvider.workers);
 
     return Scaffold(
-      appBar: AppBar(title: Text('التقارير')),
+      appBar: AppBar(title: Text('📊 التقارير')),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
@@ -93,8 +73,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                _buildDatePicker('من', startDate, () => _selectDate(context, true)),
-                _buildDatePicker('إلى', endDate, () => _selectDate(context, false)),
+                _buildDatePicker('📅 من', startDate, () => _selectDate(context, true)),
+                _buildDatePicker('📅 إلى', endDate, () => _selectDate(context, false)),
               ],
             ),
             SizedBox(height: 16),
@@ -104,16 +84,8 @@ class _ReportsScreenState extends State<ReportsScreen> {
               children: [
                 Expanded(
                   child: ElevatedButton(
-                    onPressed: _exportToExcel,
+                    onPressed: () => _exportToExcel(workerProvider.workers),
                     child: Text('📄 تصدير إلى Excel'),
-                  ),
-                ),
-                SizedBox(width: 10),
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: _clearAttendance,
-                    style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-                    child: Text('🗑️ مسح بيانات الحضور'),
                   ),
                 ),
               ],
@@ -123,7 +95,7 @@ class _ReportsScreenState extends State<ReportsScreen> {
             // قائمة التقارير
             Expanded(
               child: attendanceCount.isEmpty
-                  ? Center(child: Text('لا يوجد حضور في هذه الفترة'))
+                  ? Center(child: Text('❌ لا يوجد حضور في هذه الفترة'))
                   : ListView.builder(
                 itemCount: attendanceCount.length,
                 itemBuilder: (context, index) {

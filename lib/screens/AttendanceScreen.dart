@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-
+import 'package:provider/provider.dart';
+import '../provider/WorkerProvider.dart';
+import '../models/worker_model.dart';
 
 class AttendanceScreen extends StatefulWidget {
   @override
@@ -10,14 +12,7 @@ class AttendanceScreen extends StatefulWidget {
 class _AttendanceScreenState extends State<AttendanceScreen> {
   DateTime selectedDate = DateTime.now();
 
-  // بيانات العمال الحاضرين (محاكاة)
-  final Map<String, List<String>> attendanceData = {
-    '2025-02-14': ['أحمد علي', 'محمد حسن', 'سعيد محمود'],
-    '2025-02-13': ['كريم ياسر', 'مصطفى فهمي'],
-    '2025-02-12': ['علي إبراهيم', 'يوسف سامي', 'خالد عماد'],
-  };
-
-  // دالة لتحديث التاريخ
+  // دالة لاختيار التاريخ
   void _selectDate(BuildContext context) async {
     DateTime? picked = await showDatePicker(
       context: context,
@@ -35,8 +30,16 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final workerProvider = context.watch<WorkerProvider>();
+
+    // تحويل التاريخ إلى الصيغة المطلوبة (yyyy-MM-dd)
     String formattedDate = DateFormat('yyyy-MM-dd').format(selectedDate);
-    List<String> workers = attendanceData[formattedDate] ?? [];
+
+    // استخراج العمال الذين لديهم حضور في التاريخ المحدد
+    List<Worker> presentWorkers = workerProvider.workers.where((worker) {
+      return worker.attendanceRecords.any((record) =>
+      DateFormat('yyyy-MM-dd').format(record.date) == formattedDate);
+    }).toList();
 
     return Scaffold(
       appBar: AppBar(title: Text('سجل الحضور')),
@@ -60,13 +63,21 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
             ),
             SizedBox(height: 16),
 
-            // قائمة العمال الحاضرين
+            // عرض قائمة العمال الحاضرين
             Expanded(
-              child: workers.isEmpty
+              child: presentWorkers.isEmpty
                   ? Center(child: Text('لا يوجد عمال مسجلين في هذا اليوم'))
                   : ListView.builder(
-                itemCount: workers.length,
+                itemCount: presentWorkers.length,
                 itemBuilder: (context, index) {
+                  Worker worker = presentWorkers[index];
+
+                  // استخراج سجل الحضور لهذا اليوم
+                  AttendanceRecord? attendanceRecord = worker.attendanceRecords.firstWhere(
+                        (record) => DateFormat('yyyy-MM-dd').format(record.date) == formattedDate,
+                    orElse: () => AttendanceRecord(date: selectedDate),
+                  );
+
                   return Card(
                     margin: EdgeInsets.symmetric(vertical: 8),
                     child: ListTile(
@@ -74,8 +85,22 @@ class _AttendanceScreenState extends State<AttendanceScreen> {
                         backgroundColor: Colors.blue.shade100,
                         child: Icon(Icons.person, color: Colors.blue),
                       ),
-                      title: Text(workers[index]),
-                      subtitle: Text('حضر في $formattedDate'),
+                      title: Text(worker.name),
+                      subtitle: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('القسم: ${worker.department}'),
+                          Text(
+                            'وقت الدخول: ${attendanceRecord.checkInTime != null ? attendanceRecord.checkInTime!.format(context) : "غير مسجل"}',
+                          ),
+                          Text(
+                            'وقت الخروج: ${attendanceRecord.checkOutTime != null ? attendanceRecord.checkOutTime!.format(context) : "غير مسجل"}',
+                          ),
+                          Text(
+                            'مدة العمل: ${attendanceRecord.workDuration.inHours} ساعات ${attendanceRecord.workDuration.inMinutes % 60} دقائق',
+                          ),
+                        ],
+                      ),
                     ),
                   );
                 },

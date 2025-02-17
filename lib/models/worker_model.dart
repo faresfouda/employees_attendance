@@ -29,8 +29,9 @@ class Worker extends HiveObject {
     this.totalHours = 0.0,
     this.hourCost = 0.0,
     this.isRegistered = false,
-    this.attendanceRecords = const [],
-  });
+    List<AttendanceRecord>? attendanceRecords,
+  }) : attendanceRecords = attendanceRecords ?? [];
+
 
   void updateTotalHours() {
     totalHours = attendanceRecords.fold(0.0, (sum, record) => sum + record.workDuration.inHours);
@@ -44,22 +45,30 @@ class AttendanceRecord {
   DateTime date;
 
   @HiveField(1)
-  TimeOfDay checkInTime;
+  TimeOfDay? checkInTime;
 
   @HiveField(2)
   TimeOfDay? checkOutTime;
 
   AttendanceRecord({
     required this.date,
-    required this.checkInTime,
+    this.checkInTime,
     this.checkOutTime,
   });
 
 
   Duration get workDuration {
-    if (checkOutTime == null) return Duration.zero;
-    DateTime checkIn = DateTime(date.year, date.month, date.day, checkInTime.hour, checkInTime.minute);
+    if (checkInTime == null || checkOutTime == null) return Duration.zero;
+
+    DateTime checkIn = DateTime(date.year, date.month, date.day, checkInTime!.hour, checkInTime!.minute);
     DateTime checkOut = DateTime(date.year, date.month, date.day, checkOutTime!.hour, checkOutTime!.minute);
+
+
+    if (checkOut.isBefore(checkIn)) {
+      checkOut = checkOut.add(Duration(days: 1));
+    }
+
     return checkOut.difference(checkIn);
   }
+
 }

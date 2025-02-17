@@ -21,15 +21,17 @@ class _AddWorkerScreenState extends State<AddWorkerScreen> {
     final String department = selectedDepartment ?? 'صالة';
     final double? hourlyCost = double.tryParse(hourlyRateController.text.trim());
 
-    if (name.isEmpty || department.isEmpty) {
+    if (name.isEmpty ) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('يرجى إدخال جميع البيانات بشكل صحيح')),
+        SnackBar(content: Text('يرجى إدخال الاسم بشكل صحيح')),
       );
       return;
     }
 
-    final worker = Worker(name: name,department: department,hourCost: hourlyCost??0.0);
+    final worker = Worker(name: name,department: department,hourCost: hourlyCost??0.0,);
     boxWorkers.put('key_${name}', worker);
+    worker.save();
+
 
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(content: Text('تمت إضافة العامل بنجاح')),
@@ -54,26 +56,6 @@ class _AddWorkerScreenState extends State<AddWorkerScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.center,
             children: [
-              Center(
-                child: Stack(
-                  children: [
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Colors.grey.shade200,
-                      child: Icon(Icons.person, size: 50, color: Colors.grey.shade600),
-                    ),
-                    Positioned(
-                      bottom: 0,
-                      right: 0,
-                      child: CircleAvatar(
-                        radius: 18,
-                        backgroundColor: Colors.blue,
-                        child: Icon(Icons.camera_alt, color: Colors.white, size: 18),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               SizedBox(height: 16),
               TextField(
                 controller: nameController,

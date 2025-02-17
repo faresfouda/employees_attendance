@@ -35,6 +35,7 @@ dependencies:
   intl:
   excel:
   arabic_font:
+  provider:
 
 
 

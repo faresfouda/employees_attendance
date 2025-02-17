@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:hive/hive.dart';
+import 'package:provider/provider.dart';
 import '../components/workercard.dart';
 import '../models/worker_model.dart';
+import '../provider/WorkerProvider.dart';
 import 'WorkersDetails.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -10,45 +11,24 @@ class DashboardScreen extends StatefulWidget {
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  late Box<Worker> workerBox;
-  List<Worker> workers = [];
-  List<Worker> filteredWorkers = [];
   TextEditingController searchController = TextEditingController();
   String selectedDepartment = 'الكل';
 
   @override
   void initState() {
     super.initState();
-    _loadWorkers();
-    searchController.addListener(_filterWorkers);
+    searchController.addListener(() => setState(() {}));
+
+    Future.microtask(() => context.read<WorkerProvider>().loadWorkers());
   }
 
-  void _filterWorkers() {
-    String query = searchController.text.toLowerCase();
-    setState(() {
-      filteredWorkers = workers.where((worker) {
-        bool matchesSearch = worker.name.toLowerCase().contains(query);
-        bool matchesDepartment =
-            selectedDepartment == 'الكل' || worker.department == selectedDepartment;
-        return matchesSearch && matchesDepartment;
-      }).toList();
-    });
-  }
-
-  void _loadWorkers() async {
-    workerBox = await Hive.openBox<Worker>('workers');
-    setState(() {
-      workers = workerBox.values.toList();
-      filteredWorkers = List.from(workers);
-    });
-  }
   @override
   void dispose() {
     searchController.dispose();
     super.dispose();
   }
 
-  Future<bool?> _confirmDeleteWorker(int index) async {
+  Future<bool?> _confirmDeleteWorker(Worker worker) async {
     return showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -58,21 +38,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
             text: 'هل أنت متأكد من حذف العامل ',
             children: [
               TextSpan(
-                text: workers[index].name,
+                text: worker.name,
                 style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               TextSpan(text: '؟ لا يمكن التراجع عن هذا الإجراء.'),
             ],
           ),
         ),
-
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(false), // Return false
+            onPressed: () => Navigator.of(context).pop(false),
             child: Text('إلغاء'),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(true), // Return true
+            onPressed: () => Navigator.of(context).pop(true),
             child: Text('حذف', style: TextStyle(color: Colors.red)),
           ),
         ],
@@ -80,19 +59,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _deleteWorker(int index) async {
-    await workerBox.deleteAt(index);
-    setState(() {
-      workers.removeAt(index);
-    });
+  void _deleteWorker(Worker worker) async {
+    final workerProvider = context.read<WorkerProvider>();
+    int index = workerProvider.workers.indexOf(worker);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('تم حذف العامل بنجاح')),
-    );
+    if (index != -1) {
+      workerProvider.deleteWorker(index);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('تم حذف العامل بنجاح')),
+      );
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final workerProvider = context.watch<WorkerProvider>();
+    List<Worker> workers = workerProvider.workers;
+
+    // Filter workers dynamically
+    List<Worker> filteredWorkers = workers.where((worker) {
+      bool matchesSearch = worker.name.toLowerCase().contains(searchController.text.toLowerCase());
+      bool matchesDepartment = selectedDepartment == 'الكل' || worker.department == selectedDepartment;
+      return matchesSearch && matchesDepartment;
+    }).toList();
+
+// فرز النشطين أولًا
+    filteredWorkers.sort((a, b) => b.isRegistered ? 1 : -1);
+
+
     return Scaffold(
       backgroundColor: Colors.grey[200],
       appBar: AppBar(
@@ -133,7 +128,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     if (newValue != null) {
                       setState(() {
                         selectedDepartment = newValue;
-                        _filterWorkers();
                       });
                     }
                   },
@@ -161,15 +155,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     key: Key(worker.name),
                     background: Container(
                       color: Colors.red,
-                      alignment: Alignment.centerRight,
+                      alignment: Alignment.centerLeft,
                       padding: EdgeInsets.symmetric(horizontal: 20),
                       child: Icon(Icons.delete, color: Colors.white),
                     ),
                     direction: DismissDirection.endToStart,
                     confirmDismiss: (direction) async {
-                      bool? shouldDelete = await _confirmDeleteWorker(index);
+                      bool? shouldDelete = await _confirmDeleteWorker(worker);
                       if (shouldDelete == true) {
-                        _deleteWorker(index);
+                        _deleteWorker(worker);
                       }
                       return shouldDelete;
                     },
@@ -177,13 +171,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       name: worker.name,
                       department: worker.department,
                       status: worker.isRegistered,
-                      onpressed: (){
+                      onpressed: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
-                            builder: (context) => WorkerScreen(
-                                worker: worker
-                            ),
+                            builder: (context) => WorkerScreen(worker: worker),
                           ),
                         );
                       },

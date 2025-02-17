@@ -3,16 +3,28 @@ import 'package:attendance/screens/HomeScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 import 'package:intl/date_symbol_data_local.dart';
+import 'package:provider/provider.dart';
 import 'models/boxes.dart';
+import 'models/time_of_day_adapter.dart';
 import 'models/worker_model.dart';
+import 'provider/WorkerProvider.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initializeDateFormatting('ar', null);
   await Hive.initFlutter();
   Hive.registerAdapter(WorkerAdapter());
+  Hive.registerAdapter(AttendanceRecordAdapter());
+  Hive.registerAdapter(TimeOfDayAdapter());
   boxWorkers = await Hive.openBox<Worker>('workers');
-  runApp(MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => WorkerProvider()..loadWorkers()), // ✅ تحميل العمال عند بدء التطبيق
+      ],
+      child: MyApp(),
+    ),
+  );
 }
 
 
