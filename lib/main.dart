@@ -8,6 +8,9 @@ import 'models/boxes.dart';
 import 'models/time_of_day_adapter.dart';
 import 'models/worker_model.dart';
 import 'provider/WorkerProvider.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+
+import 'screens/login.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -37,17 +40,20 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'حضور وانصراف الموظف',
+      locale: Locale('ar'),
+      supportedLocales: [Locale('ar')],
+      localizationsDelegates: [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
       theme: ThemeData(
-        fontFamily: ArabicThemeData.font(
-            arabicFont: ArabicFont.dinNextLTArabic
-        ),
+        fontFamily: ArabicThemeData.font(arabicFont: ArabicFont.dinNextLTArabic),
         package: ArabicThemeData.package,
       ),
       debugShowCheckedModeBanner: false,
-      home: Directionality(
-        textDirection: TextDirection.rtl,
-        child: HomeScreen(),
-      ),
+      home: LoginScreen(),
     );
+
   }
 }

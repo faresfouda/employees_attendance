@@ -36,12 +36,25 @@ dependencies:
   excel:
   arabic_font:
   provider:
-
-
-
-  # The following adds the Cupertino Icons font to your application.
-  # Use with the CupertinoIcons class for iOS style icons.
+  permission_handler:
+  path_provider:
   cupertino_icons: ^1.0.6
+  share_plus: ^6.3.0
+  xml: ^5.3.1
+  syncfusion_flutter_xlsio: ^28.2.6
+  flutter_localizations:
+    sdk: flutter
+  flutter_launcher_icons: ^0.13.1
+
+flutter_icons:
+  android: true
+  ios: true
+  image_path: "assets/fouda_profile.jpg"
+
+dependency_overrides:
+  xml: ^5.3.1
+
+
 
 dev_dependencies:
   flutter_test:

@@ -1,4 +1,5 @@
 import 'package:attendance/models/boxes.dart';
+import 'package:attendance/screens/HomeScreen.dart';
 import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
@@ -41,6 +42,10 @@ class _AddWorkerScreenState extends State<AddWorkerScreen> {
     setState(() {
       selectedDepartment = null;
     });
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (context) =>HomeScreen(userRole: 'user',)),
+    );
 
   }
 

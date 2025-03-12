@@ -67,7 +67,7 @@ class _WorkerScreenState extends State<WorkerScreen> {
           }
         }
 
-        widget.worker.updateTotalHours();
+        // widget.worker.updateTotalHours();
         workerProvider.updateWorker(workerProvider.workers.indexOf(widget.worker), widget.worker);
       });
     }

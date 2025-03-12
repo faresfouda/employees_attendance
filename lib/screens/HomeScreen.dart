@@ -8,20 +8,66 @@ import 'AttendanceScreen.dart';
 import 'ReportsScreen.dart';
 
 class HomeScreen extends StatefulWidget {
+  final String userRole; // قيمة الدور: "user" أو "admin"
+
+  const HomeScreen({Key? key, required this.userRole}) : super(key: key);
+
   @override
   _HomeScreenState createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
-  @override
+  late List<Widget> _pages;
+  late List<BottomNavigationBarItem> _navItems;
 
-  final List<Widget> _pages = [
-    DashboardScreen(),
-    AddWorkerScreen(),
-    AttendanceScreen(),
-    ReportsScreen(),
-  ];
+  @override
+  void initState() {
+    super.initState();
+    // إذا كان الدور admin يعرض جميع الشاشات، وإذا كان user يعرض أول شاشتين فقط
+    if (widget.userRole == 'admin') {
+      _pages = [
+        DashboardScreen(),
+        AddWorkerScreen(),
+        AttendanceScreen(),
+        ReportScreen(),
+      ];
+      _navItems = [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.dashboard),
+          label: 'الرئيسية',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_add),
+          label: 'إضافة عامل',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.access_time),
+          label: 'الحضور',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.bar_chart),
+          label: 'التقارير',
+        ),
+      ];
+    } else {
+      _pages = [
+        DashboardScreen(),
+        AddWorkerScreen(),
+      ];
+      _navItems = [
+        BottomNavigationBarItem(
+          icon: Icon(Icons.dashboard),
+          label: 'الرئيسية',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.person_add),
+          label: 'إضافة عامل',
+        ),
+      ];
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -30,17 +76,12 @@ class _HomeScreenState extends State<HomeScreen> {
         currentIndex: _currentIndex,
         selectedItemColor: Colors.blue,
         unselectedItemColor: Colors.grey,
+        items: _navItems,
         onTap: (index) {
           setState(() {
             _currentIndex = index;
           });
         },
-        items: [
-          BottomNavigationBarItem(icon: Icon(Icons.dashboard), label: 'الرئيسية'),
-          BottomNavigationBarItem(icon: Icon(Icons.person_add), label: 'إضافة عامل'),
-          BottomNavigationBarItem(icon: Icon(Icons.access_time), label: 'الحضور'),
-          BottomNavigationBarItem(icon: Icon(Icons.bar_chart), label: 'التقارير'),
-        ],
       ),
     );
   }

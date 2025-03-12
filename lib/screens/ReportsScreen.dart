@@ -1,168 +1,247 @@
-import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:permission_handler/permission_handler.dart';
 import 'package:provider/provider.dart';
 import 'package:excel/excel.dart';
+import 'dart:io';
 import 'package:path_provider/path_provider.dart';
-import '../provider/WorkerProvider.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/worker_model.dart';
+import '../provider/WorkerProvider.dart';
 
-class ReportsScreen extends StatefulWidget {
+class ReportScreen extends StatefulWidget {
+  const ReportScreen({super.key});
+
   @override
-  _ReportsScreenState createState() => _ReportsScreenState();
+  _ReportScreenState createState() => _ReportScreenState();
 }
 
-class _ReportsScreenState extends State<ReportsScreen> {
-  DateTime startDate = DateTime.now().subtract(Duration(days: 7));
-  DateTime endDate = DateTime.now();
+class _ReportScreenState extends State<ReportScreen> {
+  DateTime? startDate;
+  DateTime? endDate;
+  String? exportedFilePath;
 
-  // دالة لحساب أيام الحضور لكل عامل بناءً على الفترة المحددة
-  Map<String, int> _calculateAttendance(List<Worker> workers) {
-    Map<String, int> attendanceCount = {};
+  @override
+  void initState() {
+    super.initState();
+    DateTime today = DateTime.now();
+    // القيمة المبدئية: من أسبوع قبل اليوم (7 أيام) حتى اليوم.
+    // لضمان فترة 7 أيام، نحسب startDate كالتالي:
+    startDate = today.subtract(Duration(days: 6));
+    endDate = today;
+  }
 
+  // دالة لمساعدتك في تنسيق TimeOfDay إلى سلسلة HH:mm.
+  String formatTimeOfDay(TimeOfDay time) {
+    final hour = time.hour;
+    final minute = time.minute;
+    return '$hour:${minute.toString().padLeft(2, '0')}';
+  }
+
+  // دالة لمقارنة يومين إذا كانوا في نفس اليوم.
+  bool isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
+
+  Future<void> requestPermissions() async {
+    var status = await Permission.storage.request();
+    if (status.isGranted) {
+      print("Storage permission granted");
+    } else {
+      print("Storage permission denied");
+    }
+  }
+
+  Future<void> _exportToExcel(BuildContext context) async {
+    final workerProvider = Provider.of<WorkerProvider>(context, listen: false);
+    List<Worker> workers = workerProvider.workers;
+
+    var excel = Excel.createExcel();
+    Sheet sheet = excel["Workers Report"];
+
+    if (startDate == null || endDate == null) return;
+    // حساب عدد الأيام بناءً على الفرق بين التاريخين.
+    final duration = endDate!.difference(startDate!);
+    final numberOfDays = duration.inDays + 1;
+
+    // إعداد رؤوس الأعمدة مع التواريخ من startDate حتى endDate.
+    List<TextCellValue> headerDates = [];
+    for (int i = 0; i < numberOfDays; i++) {
+      DateTime currentDate = startDate!.add(Duration(days: i));
+      headerDates.add(TextCellValue(currentDate.toLocal().toString().split(' ')[0]));
+    }
+
+    sheet.appendRow([
+      TextCellValue("الاسم"),
+      TextCellValue("القسم"),
+      TextCellValue("إجمالي الساعات"),
+      TextCellValue("تكلفة الساعة"),
+      TextCellValue("التكلفة الإجمالية"),
+      ...headerDates,
+    ]);
+
+    // إضافة بيانات العمال.
     for (var worker in workers) {
-      for (var record in worker.attendanceRecords) {
-        if (record.date.isAfter(startDate.subtract(Duration(days: 1))) &&
-            record.date.isBefore(endDate.add(Duration(days: 1)))) {
-          attendanceCount[worker.name] = (attendanceCount[worker.name] ?? 0) + 1;
+      double totalMinutes = 0;
+      // إنشاء قائمة لتخزين بيانات الحضور لكل يوم في الفترة.
+      List<String> attendanceDays = List.filled(numberOfDays, "غير محدد");
+
+      // المرور على كل يوم في الفترة.
+      for (int i = 0; i < numberOfDays; i++) {
+        DateTime currentDay = startDate!.add(Duration(days: i));
+        // تصفية سجلات الحضور التي تتوافق مع اليوم الحالي.
+        var recordsForDay = worker.attendanceRecords
+            .where((record) => isSameDay(record.date, currentDay))
+            .toList();
+
+        // جمع الدقائق في اليوم الحالي.
+        double dayMinutes = recordsForDay.fold(
+            0.0, (sum, record) => sum + record.workDuration.inMinutes);
+        totalMinutes += dayMinutes;
+
+        // إذا كان في سجلات في اليوم الحالي، نجمعها.
+        if (recordsForDay.isNotEmpty) {
+          List<String> dayRecords = recordsForDay.map((attendance) {
+            final checkInTimeFormatted = attendance.checkInTime != null
+                ? formatTimeOfDay(attendance.checkInTime!)
+                : 'غير محدد';
+            final checkOutTimeFormatted = attendance.checkOutTime != null
+                ? formatTimeOfDay(attendance.checkOutTime!)
+                : 'غير محدد';
+            return "حضور: $checkInTimeFormatted, انصراف: $checkOutTimeFormatted";
+          }).toList();
+          attendanceDays[i] = dayRecords.join(" | ");
         }
+      }
+
+      // حساب التكلفة بناءً على الدقائق.
+      double totalCost = (totalMinutes / 60) * worker.hourCost;
+
+      sheet.appendRow([
+        TextCellValue(worker.name),
+        TextCellValue(worker.department),
+        TextCellValue((totalMinutes / 60).toStringAsFixed(2)),
+        TextCellValue(worker.hourCost.toString()),
+        TextCellValue(totalCost.toStringAsFixed(2)),
+        ...attendanceDays.map((attendance) => TextCellValue(attendance)),
+      ]);
+    }
+
+    // حفظ الملف.
+    Future<void> saveFile() async {
+      Directory? directory = await getExternalStorageDirectory();
+      if (directory != null) {
+        String formattedDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        String path = "${directory.path}/تقفيل_العمال_بتاريخ_$formattedDate.xlsx";
+        File file = File(path);
+        var bytes = excel.encode();
+        await file.writeAsBytes(bytes!);
+        setState(() {
+          exportedFilePath = path;
+        });
       }
     }
 
-    return attendanceCount;
+    await saveFile();
+
+    // حذف السجلات التي تم اصدارها بالفعل ضمن الفترة المحددة
+    // باستخدام الطريقة الأولى: إزالة كل سجل يكون تاريخه بين startDate و endDate (شاملة اليومين)
+    for (var worker in workers) {
+      worker.attendanceRecords.removeWhere((record) =>
+      record.date.isAfter(startDate!.subtract(Duration(days: 1))) &&
+          record.date.isBefore(endDate!.add(Duration(days: 1))));
+    }
+    workerProvider.notifyListeners();
   }
 
-  // دالة تصدير البيانات إلى Excel
-  Future<void> _exportToExcel(List<Worker> workers) async {
-    var excel = Excel.createExcel();
-    Sheet sheet = excel['التقرير'];
+  void _shareFile() async {
+    await _exportToExcel(context);
+    if (exportedFilePath != null) {
+      Share.shareFiles([exportedFilePath!],
+          text: "Here is the Worker Report");
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("Please export the report first!")),
+      );
+    }
+  }
 
-    // إضافة عنوان الجدول
-    sheet.appendRow([TextCellValue('اسم العامل'), TextCellValue('عدد أيام الحضور')]);
-
-    // إضافة بيانات التقرير
-    _calculateAttendance(workers).forEach((worker, daysPresent) {
-      sheet.appendRow([TextCellValue(worker), TextCellValue(daysPresent.toString())]);
-    });
-
-    // حفظ الملف في التخزين
-    Directory? directory = await getExternalStorageDirectory();
-    String filePath = '${directory?.path}/Attendance_Report.xlsx';
-
-    File(filePath)
-      ..createSync(recursive: true)
-      ..writeAsBytesSync(excel.encode()!);
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('📁 تم حفظ التقرير في: $filePath')),
+  // دالة لاختيار التاريخ باستخدام DatePicker.
+  Future<void> _selectDate(BuildContext context, bool isStartDate) async {
+    DateTime initialDate = DateTime.now();
+    DateTime? selectedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
     );
+    if (selectedDate != null) {
+      setState(() {
+        if (isStartDate) {
+          startDate = selectedDate;
+        } else {
+          endDate = selectedDate;
+        }
+      });
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    final workerProvider = context.watch<WorkerProvider>();
-    Map<String, int> attendanceCount = _calculateAttendance(workerProvider.workers);
-
     return Scaffold(
-      appBar: AppBar(title: Text('📊 التقارير')),
-      body: Padding(
+      appBar: AppBar(title: const Text("تصدير تقرير العمال")),
+      body: SingleChildScrollView(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           children: [
-            // اختيار التاريخ
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                _buildDatePicker('📅 من', startDate, () => _selectDate(context, true)),
-                _buildDatePicker('📅 إلى', endDate, () => _selectDate(context, false)),
-              ],
+            Card(
+              margin: const EdgeInsets.symmetric(vertical: 8.0),
+              elevation: 4,
+              child: ListTile(
+                leading: const Icon(Icons.date_range),
+                title: const Text("تاريخ البداية"),
+                subtitle: Text(startDate == null
+                    ? "لم يتم التحديد"
+                    : "${startDate!.toLocal()}".split(' ')[0]),
+                trailing: IconButton(
+                  icon: const Icon(Icons.calendar_today),
+                  onPressed: () => _selectDate(context, true),
+                ),
+              ),
             ),
-            SizedBox(height: 16),
-
-            // أزرار التحكم
+            Card(
+              margin: const EdgeInsets.symmetric(vertical: 8.0),
+              elevation: 4,
+              child: ListTile(
+                leading: const Icon(Icons.date_range),
+                title: const Text("تاريخ النهاية"),
+                subtitle: Text(endDate == null
+                    ? "لم يتم التحديد"
+                    : "${endDate!.toLocal()}".split(' ')[0]),
+                trailing: IconButton(
+                  icon: const Icon(Icons.calendar_today),
+                  onPressed: () => _selectDate(context, false),
+                ),
+              ),
+            ),
+            const SizedBox(height: 20),
             Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
               children: [
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () => _exportToExcel(workerProvider.workers),
-                    child: Text('📄 تصدير إلى Excel'),
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.share),
+                  label: const Text("مشاركة التقرير"),
+                  onPressed: _shareFile,
+                  style: ElevatedButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(
+                        vertical: 12, horizontal: 20),
                   ),
                 ),
               ],
-            ),
-            SizedBox(height: 16),
-
-            // قائمة التقارير
-            Expanded(
-              child: attendanceCount.isEmpty
-                  ? Center(child: Text('❌ لا يوجد حضور في هذه الفترة'))
-                  : ListView.builder(
-                itemCount: attendanceCount.length,
-                itemBuilder: (context, index) {
-                  String worker = attendanceCount.keys.elementAt(index);
-                  int daysPresent = attendanceCount[worker]!;
-                  return Card(
-                    margin: EdgeInsets.symmetric(vertical: 8),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        backgroundColor: Colors.green.shade100,
-                        child: Icon(Icons.person, color: Colors.green),
-                      ),
-                      title: Text(worker),
-                      subtitle: Text('حضر $daysPresent يومًا في الفترة المحددة'),
-                    ),
-                  );
-                },
-              ),
             ),
           ],
         ),
       ),
     );
-  }
-
-  // ويدجت اختيار التاريخ
-  Widget _buildDatePicker(String label, DateTime date, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Row(
-        children: [
-          Icon(Icons.calendar_today, color: Colors.blue),
-          SizedBox(width: 8),
-          Text(
-            '$label: ${DateFormat('dd/MM/yyyy').format(date)}',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // دالة اختيار التاريخ
-  Future<void> _selectDate(BuildContext context, bool isStart) async {
-    DateTime initialDate = isStart ? startDate : endDate;
-
-    DateTime? picked = await showDatePicker(
-      context: context,
-      initialDate: initialDate,
-      firstDate: DateTime(2024, 1, 1),
-      lastDate: DateTime(2030),
-    );
-
-    if (picked != null) {
-      setState(() {
-        if (isStart) {
-          startDate = picked;
-          if (startDate.isAfter(endDate)) {
-            endDate = startDate;
-          }
-        } else {
-          endDate = picked;
-          if (endDate.isBefore(startDate)) {
-            startDate = endDate;
-          }
-        }
-      });
-    }
   }
 }

@@ -33,10 +33,7 @@ class Worker extends HiveObject {
   }) : attendanceRecords = attendanceRecords ?? [];
 
 
-  void updateTotalHours() {
-    totalHours = attendanceRecords.fold(0.0, (sum, record) => sum + record.workDuration.inHours);
-    save();
-  }
+
 }
 
 @HiveType(typeId: 1)
