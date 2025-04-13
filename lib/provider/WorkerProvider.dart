@@ -31,4 +31,23 @@ class WorkerProvider with ChangeNotifier {
     _workers.removeAt(index);
     notifyListeners();
   }
+
+  void updateWorkerHourCost(Worker worker, double newHourCost) async {
+    int index = _workers.indexOf(worker);
+    if (index != -1) {
+      Worker updatedWorker = Worker(
+        name: worker.name,
+        department: worker.department,
+        totalHours: worker.totalHours,
+        hourCost: newHourCost, // تحديث سعر الساعة الجديد
+        isRegistered: worker.isRegistered,
+        attendanceRecords: worker.attendanceRecords,
+      );
+
+      await _workerBox.putAt(index, updatedWorker);
+      _workers[index] = updatedWorker;
+      notifyListeners();
+    }
+  }
+
 }

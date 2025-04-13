@@ -4,8 +4,11 @@ import 'package:flutter/material.dart';
 import 'package:hive_flutter/hive_flutter.dart';
 
 import 'AddWorkerScreen.dart';
+import 'AddWorkerScreenAdmin.dart';
 import 'AttendanceScreen.dart';
+import 'EditHourCostScreen.dart';
 import 'ReportsScreen.dart';
+import 'SelectWorkerScreen.dart';
 
 class HomeScreen extends StatefulWidget {
   final String userRole; // قيمة الدور: "user" أو "admin"
@@ -28,8 +31,9 @@ class _HomeScreenState extends State<HomeScreen> {
     if (widget.userRole == 'admin') {
       _pages = [
         DashboardScreen(),
-        AddWorkerScreen(),
+        AddWorkerScreenAdmin(),
         AttendanceScreen(),
+        SelectWorkerScreen(),
         ReportScreen(),
       ];
       _navItems = [
@@ -44,6 +48,10 @@ class _HomeScreenState extends State<HomeScreen> {
         BottomNavigationBarItem(
           icon: Icon(Icons.access_time),
           label: 'الحضور',
+        ),
+        BottomNavigationBarItem(
+          icon: Icon(Icons.monetization_on),
+          label: 'تعديل سعر الساعة',
         ),
         BottomNavigationBarItem(
           icon: Icon(Icons.bar_chart),

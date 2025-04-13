@@ -5,12 +5,12 @@ import 'package:hive_flutter/hive_flutter.dart';
 
 import '../models/worker_model.dart';
 
-class AddWorkerScreen extends StatefulWidget {
+class AddWorkerScreenAdmin extends StatefulWidget {
   @override
-  _AddWorkerScreenState createState() => _AddWorkerScreenState();
+  _AddWorkerScreenAdminState createState() => _AddWorkerScreenAdminState();
 }
 
-class _AddWorkerScreenState extends State<AddWorkerScreen> {
+class _AddWorkerScreenAdminState extends State<AddWorkerScreenAdmin> {
   final TextEditingController nameController = TextEditingController();
   final TextEditingController hourlyRateController = TextEditingController();
   String? selectedDepartment;
@@ -20,7 +20,7 @@ class _AddWorkerScreenState extends State<AddWorkerScreen> {
   void addWorker() {
     final String name = nameController.text.trim()??'a';
     final String department = selectedDepartment ?? 'صالة';
-    final double? hourlyCost = 0.0;
+    final double? hourlyCost = double.tryParse(hourlyRateController.text.trim());
 
     if (name.isEmpty ) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -44,7 +44,7 @@ class _AddWorkerScreenState extends State<AddWorkerScreen> {
     });
     Navigator.pushReplacement(
       context,
-      MaterialPageRoute(builder: (context) =>HomeScreen(userRole: 'user',)),
+      MaterialPageRoute(builder: (context) =>HomeScreen(userRole: 'admin',)),
     );
 
   }
@@ -89,6 +89,14 @@ class _AddWorkerScreenState extends State<AddWorkerScreen> {
                 ),
               ),
               SizedBox(height: 16),
+              TextField(
+                controller: hourlyRateController,
+                keyboardType: TextInputType.number,
+                decoration: InputDecoration(
+                  labelText: 'سعر الساعة',
+                  border: OutlineInputBorder(),
+                ),
+              ),
               SizedBox(height: 24),
               SizedBox(
                 width: double.infinity,
